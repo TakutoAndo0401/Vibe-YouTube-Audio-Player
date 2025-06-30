@@ -47,7 +47,6 @@ class MediaPlayer:
         self.playlist: List[VideoInfo] = []
         self.current_index = 0
         self.is_playing = False
-        self.volume = 70
         
         # VLCイベントマネージャー
         self.event_manager = self.player.event_manager()
@@ -82,7 +81,6 @@ class MediaPlayer:
         self.player.play()
         self.current_video = video
         self.is_playing = True
-        self.player.audio_set_volume(self.volume)
         return True
     
     def pause(self):
@@ -109,10 +107,7 @@ class MediaPlayer:
             return self.play_current()
         return False
     
-    def set_volume(self, volume: int):
-        """音量設定（0-100）"""
-        self.volume = max(0, min(100, volume))
-        self.player.audio_set_volume(self.volume)
+
     
     def get_position(self) -> float:
         """再生位置を取得（0.0-1.0）"""
@@ -202,9 +197,19 @@ class URLInputScreen(ModalScreen):
         padding: 1;
     }
     
+    #title {
+        text-align: center;
+        margin-bottom: 1;
+    }
+    
     #url_input_field {
         width: 1fr;
         margin: 1 0;
+    }
+    
+    #url_input_field:disabled {
+        opacity: 0.6;
+        border: solid $warning;
     }
     
     #button_container {
@@ -215,12 +220,18 @@ class URLInputScreen(ModalScreen):
     #add_button, #cancel_button {
         margin: 0 1;
     }
+    
+    #add_button:disabled {
+        opacity: 0.7;
+        background: $warning;
+    }
     """
     
     def __init__(self, callback):
         super().__init__()
         self.callback = callback
         self.url_input = None
+        self.is_processing = False  # 処理中フラグ
     
     def compose(self) -> ComposeResult:
         with Container(id="url_input_dialog"):
@@ -242,24 +253,77 @@ class URLInputScreen(ModalScreen):
     async def on_button_pressed(self, event: Button.Pressed):
         """ボタン押下時の処理"""
         if event.button.id == "add_button":
-            url = self.url_input.value.strip()
-            if url:
-                await self.callback(url)
-            self.dismiss()
+            await self._handle_submit()
         elif event.button.id == "cancel_button":
             self.dismiss()
     
     async def on_input_submitted(self, event: Input.Submitted):
         """Enter キー押下時の処理"""
         if event.input == self.url_input:
+            await self._handle_submit()
+    
+    async def _handle_submit(self):
+        """共通のsubmit処理"""
+        # 既に処理中の場合は何もしない
+        if self.is_processing:
+            return
+        
+        self.is_processing = True
+        
+        try:
+            # ボタンを無効化して視覚的フィードバック
+            add_button = self.query_one("#add_button")
+            cancel_button = self.query_one("#cancel_button")
+            
+            add_button.disabled = True
+            add_button.label = "処理中..."
+            # キャンセルボタンは有効のまま（処理中でもキャンセル可能）
+            cancel_button.label = "キャンセル"
+            
+            # URL入力フィールドも無効化してプレースホルダーを変更
+            self.url_input.disabled = True
+            self.url_input.placeholder = "動画情報を取得中..."
+            
+            # タイトルも更新して処理中であることを明確に表示
+            title_static = self.query_one("#title")
+            title_static.update("🔄 動画情報を取得中です...")
+            
+            # 状態変更を確実に表示するため少し待機
+            await asyncio.sleep(0.1)
+            
             url = self.url_input.value.strip()
             if url:
+                # 処理開始をより明確に表示
+                title_static.update("🔄 YouTube情報を取得中...")
+                await asyncio.sleep(0.1)  # 状態変更を確実に表示
+                
                 await self.callback(url)
+                
+                # 処理完了メッセージを表示
+                title_static.update("✅ 追加完了！")
+                add_button.label = "完了"
+                await asyncio.sleep(0.5)  # 完了メッセージを表示
+            
+            # 処理完了後にダイアログを閉じる
             self.dismiss()
+            
+        except Exception as e:
+            # エラーが発生した場合もダイアログを閉じる
+            try:
+                title_static = self.query_one("#title")
+                title_static.update("❌ エラーが発生しました")
+                await asyncio.sleep(0.5)
+            except:
+                pass
+            self.dismiss()
+        finally:
+            # 処理フラグをリセット（念のため）
+            self.is_processing = False
     
     def on_key(self, event):
         """ESCキーでキャンセル"""
         if event.key == "escape":
+            # 処理中でもキャンセル可能
             self.dismiss()
 
 
@@ -271,7 +335,6 @@ class PlayerControlWidget(Container):
         self.player = player
         self.progress_bar = ProgressBar(show_eta=False)
         self.time_label = Static("00:00 / 00:00")
-        self.volume_label = Static(f"音量: {player.volume}%")
         self.status_label = Static("停止中")
         
     def compose(self) -> ComposeResult:
@@ -279,7 +342,6 @@ class PlayerControlWidget(Container):
             yield self.status_label
             yield self.progress_bar
             yield self.time_label
-            yield self.volume_label
     
     def update_display(self):
         """表示を更新"""
@@ -303,8 +365,6 @@ class PlayerControlWidget(Container):
             self.status_label.update("停止中")
             self.progress_bar.update(progress=0)
             self.time_label.update("00:00 / 00:00")
-        
-        self.volume_label.update(f"音量: {self.player.volume}%")
 
 
 class YouTubePlayerApp(App):
@@ -340,8 +400,6 @@ class YouTubePlayerApp(App):
         Binding("space", "play_pause", "再生/一時停止"),
         Binding("n", "next_track", "次の曲"),
         Binding("p", "previous_track", "前の曲"),
-        Binding("up", "volume_up", "音量+"),
-        Binding("down", "volume_down", "音量-"),
         Binding("left", "seek_backward", "巻き戻し"),
         Binding("right", "seek_forward", "早送り"),
         Binding("d", "delete_current", "削除"),
@@ -358,6 +416,8 @@ class YouTubePlayerApp(App):
         
         # 定期更新タスク
         self._update_task = None
+        # URL処理中フラグ
+        self._processing_urls = set()  # 処理中のURLを追跡
     
     def compose(self) -> ComposeResult:
         yield Header()
@@ -412,21 +472,50 @@ class YouTubePlayerApp(App):
         if not url:
             return
         
+        # 既に処理中のURLかチェック
+        if url in self._processing_urls:
+            self.notify("このURLは既に処理中です", severity="warning")
+            return
+        
         # YouTube URLの簡単な検証
         if 'youtube.com' not in url and 'youtu.be' not in url:
             self.notify("有効なYouTube URLを入力してください", severity="error")
             return
         
-        self.notify("動画情報を取得中...")
-        video_info = await self.downloader.get_video_info(url)
+        # 処理中URLリストに追加
+        self._processing_urls.add(url)
         
-        if video_info:
-            self.player.add_to_playlist(video_info)
-            self.playlist_widget.update_playlist()
-            self._update_instruction_banner()
-            self.notify(f"追加されました: {video_info.title}")
-        else:
-            self.notify("動画情報の取得に失敗しました", severity="error")
+        try:
+            # 処理開始の明確な通知
+            self.notify("🔄 YouTube動画情報を取得しています...", timeout=5)
+            
+            # 指示バナーも更新
+            banner = self.query_one("#instruction_banner")
+            original_banner_text = banner.renderable
+            banner.update("🔄 動画情報取得中... しばらくお待ちください")
+            
+            video_info = await self.downloader.get_video_info(url)
+            
+            if video_info:
+                self.player.add_to_playlist(video_info)
+                self.playlist_widget.update_playlist()
+                self._update_instruction_banner()
+                self.notify(f"✅ 追加完了: {video_info.title}", severity="success")
+            else:
+                self.notify("❌ 動画情報の取得に失敗しました", severity="error")
+                # バナーを元に戻す
+                banner.update(original_banner_text)
+        except Exception as e:
+            self.notify(f"❌ エラー: {str(e)}", severity="error")
+            # バナーを元に戻す
+            try:
+                banner = self.query_one("#instruction_banner")
+                self._update_instruction_banner()
+            except:
+                pass
+        finally:
+            # 処理完了後に処理中URLリストから削除
+            self._processing_urls.discard(url)
     
     def action_add_url(self):
         """URL追加アクション"""
@@ -453,13 +542,7 @@ class YouTubePlayerApp(App):
         if self.player.previous_track():
             self.playlist_widget.update_playlist()
     
-    def action_volume_up(self):
-        """音量を上げる"""
-        self.player.set_volume(self.player.volume + 5)
-    
-    def action_volume_down(self):
-        """音量を下げる"""
-        self.player.set_volume(self.player.volume - 5)
+
     
     def action_seek_forward(self):
         """早送り"""
