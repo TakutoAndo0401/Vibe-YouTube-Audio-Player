@@ -263,7 +263,7 @@ class URLInputScreen(ModalScreen):
             await self._handle_submit()
     
     async def _handle_submit(self):
-        """共通のsubmit処理"""
+        """共通のsubmit処理 - 段階的フィードバック付き"""
         # 既に処理中の場合は何もしない
         if self.is_processing:
             return
@@ -271,47 +271,63 @@ class URLInputScreen(ModalScreen):
         self.is_processing = True
         
         try:
-            # ボタンを無効化して視覚的フィードバック
+            # ステップ1: UI要素を取得
             add_button = self.query_one("#add_button")
             cancel_button = self.query_one("#cancel_button")
-            
-            add_button.disabled = True
-            add_button.label = "処理中..."
-            # キャンセルボタンは有効のまま（処理中でもキャンセル可能）
-            cancel_button.label = "キャンセル"
-            
-            # URL入力フィールドも無効化してプレースホルダーを変更
-            self.url_input.disabled = True
-            self.url_input.placeholder = "動画情報を取得中..."
-            
-            # タイトルも更新して処理中であることを明確に表示
             title_static = self.query_one("#title")
-            title_static.update("🔄 動画情報を取得中です...")
             
-            # 状態変更を確実に表示するため少し待機
+            # ステップ2: 処理開始の視覚的フィードバック
+            add_button.disabled = True
+            add_button.label = "🔄 処理中..."
+            self.url_input.disabled = True
+            self.url_input.placeholder = "処理中です..."
+            title_static.update("🔄 処理を開始しています...")
+            
+            # 状態変更を確実に表示
             await asyncio.sleep(0.1)
             
             url = self.url_input.value.strip()
             if url:
-                # 処理開始をより明確に表示
-                title_static.update("🔄 YouTube情報を取得中...")
-                await asyncio.sleep(0.1)  # 状態変更を確実に表示
+                # ステップ3: YouTube情報取得開始
+                title_static.update("🔄 YouTube動画情報を取得中...")
+                add_button.label = "🔄 取得中..."
+                await asyncio.sleep(0.1)  # 状態変更を表示
                 
+                # ステップ4: 詳細処理中
+                title_static.update("🔄 動画データを処理中...")
+                add_button.label = "🔄 処理中..."
+                await asyncio.sleep(0.1)
+                
+                # 実際のコールバック処理
                 await self.callback(url)
                 
-                # 処理完了メッセージを表示
-                title_static.update("✅ 追加完了！")
-                add_button.label = "完了"
+                # ステップ5: 処理完了
+                title_static.update("✅ 追加が完了しました！")
+                add_button.label = "✅ 完了"
                 await asyncio.sleep(0.5)  # 完了メッセージを表示
+            else:
+                # URLが空の場合
+                title_static.update("⚠️ URLを入力してください")
+                add_button.label = "追加"
+                add_button.disabled = False
+                self.url_input.disabled = False
+                self.url_input.placeholder = "https://www.youtube.com/watch?v=..."
+                await asyncio.sleep(1.0)
+                # 元の状態に戻す
+                title_static.update("YouTube URLを入力してください:")
+                self.is_processing = False
+                return
             
             # 処理完了後にダイアログを閉じる
             self.dismiss()
             
         except Exception as e:
-            # エラーが発生した場合もダイアログを閉じる
+            # エラーハンドリング
             try:
                 title_static = self.query_one("#title")
+                add_button = self.query_one("#add_button")
                 title_static.update("❌ エラーが発生しました")
+                add_button.label = "❌ エラー"
                 await asyncio.sleep(0.5)
             except:
                 pass
@@ -327,44 +343,94 @@ class URLInputScreen(ModalScreen):
             self.dismiss()
 
 
+class CustomProgressBar(Static):
+    """カスタムプログレスバーウィジェット"""
+    
+    def __init__(self):
+        super().__init__()
+        self.progress = 0.0  # 0.0 - 1.0
+        self.bar_width = 40  # バーの幅（文字数）
+    
+    def set_progress(self, progress: float):
+        """進行率を設定（0.0-1.0）"""
+        self.progress = max(0.0, min(1.0, progress))
+        self._update_bar()
+    
+    def _update_bar(self):
+        """プログレスバーの表示を更新"""
+        if self.progress == 0:
+            # 停止中
+            bar = "─" * self.bar_width
+            self.update(f"[dim]│{bar}│[/dim] 0%")
+        else:
+            # 進行中
+            filled_width = int(self.progress * self.bar_width)
+            empty_width = self.bar_width - filled_width
+            
+            # YouTubeスタイルのバー
+            filled_bar = "█" * filled_width
+            empty_bar = "░" * empty_width
+            percentage = int(self.progress * 100)
+            
+            # 色付きのバー表示
+            self.update(f"[red]│[bold white on red]{filled_bar}[/bold white on red][dim white]{empty_bar}[/dim white]│[/red] {percentage}%")
+
+
 class PlayerControlWidget(Container):
     """プレイヤーコントロールウィジェット"""
     
     def __init__(self, player: MediaPlayer):
         super().__init__()
         self.player = player
-        self.progress_bar = ProgressBar(show_eta=False)
+        self.progress_bar = CustomProgressBar()
         self.time_label = Static("00:00 / 00:00")
+        self.remaining_label = Static("残り: --:--")
         self.status_label = Static("停止中")
         
     def compose(self) -> ComposeResult:
         with Vertical():
             yield self.status_label
+            yield Static("")  # スペーサー
             yield self.progress_bar
+            yield Static("")  # スペーサー
             yield self.time_label
+            yield self.remaining_label
     
     def update_display(self):
         """表示を更新"""
         if self.player.current_video:
-            self.status_label.update(f"再生中: {self.player.current_video.title}")
+            # タイトルを短縮表示
+            title = self.player.current_video.title
+            if len(title) > 30:
+                title = title[:27] + "..."
+            self.status_label.update(f"🎵 [bold]{title}[/bold]")
             
             current_time = self.player.get_time() // 1000
             total_time = self.player.get_length() // 1000
             
             if total_time > 0:
-                progress = current_time / total_time * 100
-                self.progress_bar.update(progress=progress)
+                # 進行率計算
+                progress = current_time / total_time
+                self.progress_bar.set_progress(progress)
                 
+                # 時間表示
                 current_str = f"{current_time // 60}:{current_time % 60:02d}"
                 total_str = f"{total_time // 60}:{total_time % 60:02d}"
-                self.time_label.update(f"{current_str} / {total_str}")
+                self.time_label.update(f"⏱️  {current_str} / {total_str}")
+                
+                # 残り時間表示
+                remaining_time = total_time - current_time
+                remaining_str = f"{remaining_time // 60}:{remaining_time % 60:02d}"
+                self.remaining_label.update(f"⏳ 残り: {remaining_str}")
             else:
-                self.progress_bar.update(progress=0)
-                self.time_label.update("00:00 / 00:00")
+                self.progress_bar.set_progress(0)
+                self.time_label.update("⏱️  00:00 / 00:00")
+                self.remaining_label.update("⏳ 残り: --:--")
         else:
-            self.status_label.update("停止中")
-            self.progress_bar.update(progress=0)
-            self.time_label.update("00:00 / 00:00")
+            self.status_label.update("⏸️  [dim]停止中[/dim]")
+            self.progress_bar.set_progress(0)
+            self.time_label.update("⏱️  00:00 / 00:00")
+            self.remaining_label.update("⏳ 残り: --:--")
 
 
 class YouTubePlayerApp(App):
@@ -383,6 +449,7 @@ class YouTubePlayerApp(App):
     #control_container {
         width: 40%;
         border: solid $accent;
+        padding: 1;
     }
     
     #instruction_banner {
@@ -392,6 +459,12 @@ class YouTubePlayerApp(App):
         text-align: center;
         content-align: center middle;
         border: solid $primary;
+    }
+    
+    CustomProgressBar {
+        text-align: center;
+        height: 1;
+        margin: 1 0;
     }
     """
     
