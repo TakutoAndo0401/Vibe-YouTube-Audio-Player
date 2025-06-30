@@ -343,6 +343,97 @@ class URLInputScreen(ModalScreen):
             self.dismiss()
 
 
+class DeleteConfirmScreen(ModalScreen):
+    """削除確認用のモーダルスクリーン"""
+    
+    CSS = """
+    DeleteConfirmScreen {
+        align: center middle;
+    }
+    
+    #delete_confirm_dialog {
+        width: 70%;
+        height: 12;
+        border: thick $warning 80%;
+        background: $surface;
+        padding: 1;
+    }
+    
+    #confirm_title {
+        text-align: center;
+        margin-bottom: 1;
+        color: $warning;
+    }
+    
+    #song_info {
+        text-align: center;
+        margin: 1 0;
+        color: $text;
+    }
+    
+    #confirm_message {
+        text-align: center;
+        margin-bottom: 1;
+        color: $text-muted;
+    }
+    
+    #button_container {
+        height: 3;
+        align: center middle;
+    }
+    
+    #delete_button {
+        margin: 0 1;
+        background: $error;
+    }
+    
+    #cancel_button {
+        margin: 0 1;
+    }
+    """
+    
+    def __init__(self, video_title: str, callback):
+        super().__init__()
+        self.video_title = video_title
+        self.callback = callback
+    
+    def compose(self) -> ComposeResult:
+        with Container(id="delete_confirm_dialog"):
+            yield Static("⚠️ 削除の確認", id="confirm_title")
+            
+            # 曲名を短縮表示
+            display_title = self.video_title
+            if len(display_title) > 40:
+                display_title = display_title[:37] + "..."
+            
+            yield Static(f'"{display_title}"', id="song_info")
+            yield Static("この曲をプレイリストから削除しますか？", id="confirm_message")
+            
+            with Horizontal(id="button_container"):
+                yield Button("🗑️ 削除", variant="error", id="delete_button")
+                yield Button("キャンセル", variant="default", id="cancel_button")
+    
+    async def on_button_pressed(self, event: Button.Pressed):
+        """ボタン押下時の処理"""
+        if event.button.id == "delete_button":
+            await self.callback(True)  # 削除実行
+            self.dismiss()
+        elif event.button.id == "cancel_button":
+            await self.callback(False)  # キャンセル
+            self.dismiss()
+    
+    def on_key(self, event):
+        """キー操作"""
+        if event.key == "escape":
+            # ESCキーでキャンセル
+            asyncio.create_task(self.callback(False))
+            self.dismiss()
+        elif event.key == "enter":
+            # Enterキーで削除実行
+            asyncio.create_task(self.callback(True))
+            self.dismiss()
+
+
 class CustomProgressBar(Static):
     """カスタムプログレスバーウィジェット"""
     
@@ -630,6 +721,12 @@ class YouTubePlayerApp(App):
     def action_delete_current(self):
         """現在の曲を削除"""
         if self.player.playlist and self.player.current_index < len(self.player.playlist):
+            video = self.player.playlist[self.player.current_index]
+            self.push_screen(DeleteConfirmScreen(video.title, self._handle_delete_confirmation))
+    
+    async def _handle_delete_confirmation(self, confirmed: bool):
+        """削除確認のコールバック"""
+        if confirmed:
             self.player.remove_from_playlist(self.player.current_index)
             self.playlist_widget.update_playlist()
             self._update_instruction_banner()
