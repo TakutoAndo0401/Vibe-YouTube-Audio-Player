@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-YouTube Terminal Player - TUIベースのYouTube音楽プレイヤー
+YouTube Audio Player - TUIベースのYouTube音楽プレイヤー
 """
 
 import asyncio
@@ -572,7 +572,7 @@ class YouTubePlayerApp(App):
     
     def __init__(self):
         super().__init__()
-        self.title = "YouTube Terminal Player"
+        self.title = "YouTube Audio Player"
         self.player = MediaPlayer()
         self.downloader = YouTubeDownloader()
         self.playlist_widget = None

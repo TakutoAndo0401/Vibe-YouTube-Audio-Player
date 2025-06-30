@@ -1,5 +1,5 @@
 #!/bin/bash
-# YouTube Terminal Player 起動スクリプト
+# YouTube Audio Player 起動スクリプト
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV_PATH="$SCRIPT_DIR/venv"
@@ -10,4 +10,4 @@ if [ ! -f "$PYTHON_PATH" ]; then
     exit 1
 fi
 
-"$PYTHON_PATH" "$SCRIPT_DIR/youtube_player.py" "$@"
+"$PYTHON_PATH" "$SCRIPT_DIR/youtube_player.py" "$@" 

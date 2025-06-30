@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-YouTube Terminal Player - セットアップスクリプト
+YouTube Audio Player - セットアップスクリプト
 """
 
 import os
@@ -19,69 +19,77 @@ def create_virtual_environment():
     
     print("仮想環境を作成中...")
     venv.create(venv_path, with_pip=True)
-    print(f"仮想環境が作成されました: {venv_path}")
+    print("仮想環境が作成されました。")
+    
     return venv_path
 
 def install_dependencies(venv_path):
     """依存関係をインストール"""
-    pip_path = venv_path / "bin" / "pip"
-    requirements_path = Path.cwd() / "requirements.txt"
-    
-    if not requirements_path.exists():
-        print("requirements.txtが見つかりません。")
-        return False
-    
     print("依存関係をインストール中...")
-    try:
-        subprocess.run([str(pip_path), "install", "-r", str(requirements_path)], 
-                      check=True, capture_output=True, text=True)
-        print("依存関係のインストールが完了しました。")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"依存関係のインストールに失敗しました: {e}")
+    
+    # 仮想環境のpipパス
+    if sys.platform == "win32":
+        pip_path = venv_path / "Scripts" / "pip"
+    else:
+        pip_path = venv_path / "bin" / "pip"
+    
+    # requirements.txtから依存関係をインストール
+    requirements_file = Path.cwd() / "requirements.txt"
+    if requirements_file.exists():
+        try:
+            subprocess.run([str(pip_path), "install", "-r", str(requirements_file)], 
+                         check=True, capture_output=True, text=True)
+            print("依存関係のインストールが完了しました。")
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"依存関係のインストールに失敗しました: {e}")
+            print(f"エラー出力: {e.stderr}")
+            return False
+    else:
+        print("requirements.txtが見つかりません。")
         return False
 
 def check_vlc_installation():
-    """VLCのインストールを確認"""
+    """VLCがインストールされているかチェック"""
     try:
         import vlc
-        print("VLCライブラリが利用可能です。")
-        return True
+        print("VLCライブラリが見つかりました。")
     except ImportError:
         print("警告: VLCライブラリが見つかりません。")
-        print("システムにVLCをインストールしてください:")
+        print("VLC Media Playerをインストールしてください:")
         print("  brew install vlc  # Homebrewを使用する場合")
         print("  または https://www.videolan.org/vlc/ からダウンロード")
-        return False
 
 def create_launcher_script(venv_path):
     """起動スクリプトを作成"""
-    launcher_content = f"""#!/bin/bash
-# YouTube Terminal Player 起動スクリプト
-
-SCRIPT_DIR="$(cd "$(dirname "${{BASH_SOURCE[0]}}")" && pwd)"
-VENV_PATH="$SCRIPT_DIR/venv"
-PYTHON_PATH="$VENV_PATH/bin/python"
-
-if [ ! -f "$PYTHON_PATH" ]; then
-    echo "仮想環境が見つかりません。setup.pyを実行してください。"
-    exit 1
-fi
-
-"$PYTHON_PATH" "$SCRIPT_DIR/youtube_player.py" "$@"
+    # YouTube Audio Player 起動スクリプト
+    if sys.platform == "win32":
+        python_path = venv_path / "Scripts" / "python"
+        launcher_content = f"""@echo off
+"{python_path}" youtube_player.py
 """
+        launcher_path = Path.cwd() / "youtube-audio-player.bat"
+    else:
+        python_path = venv_path / "bin" / "python"
+        launcher_content = f"""#!/bin/bash
+# YouTube Audio Player 起動スクリプト
+cd "$(dirname "$0")"
+"{python_path}" youtube_player.py
+"""
+        launcher_path = Path.cwd() / "youtube-audio-player"
     
-    launcher_path = Path.cwd() / "youtube-player"
     with open(launcher_path, "w") as f:
         f.write(launcher_content)
     
-    # 実行権限を付与
-    os.chmod(launcher_path, 0o755)
+    # 実行権限を付与（Unix系のみ）
+    if sys.platform != "win32":
+        launcher_path.chmod(0o755)
+    
     print(f"起動スクリプトが作成されました: {launcher_path}")
 
 def main():
     """メインセットアップ関数"""
-    print("YouTube Terminal Player セットアップを開始します...")
+    print("YouTube Audio Player セットアップを開始します...")
     
     # 仮想環境作成
     venv_path = create_virtual_environment()
@@ -98,7 +106,10 @@ def main():
     
     print("\nセットアップが完了しました！")
     print("使用方法:")
-    print("  ./youtube-player")
+    if sys.platform == "win32":
+        print("  youtube-audio-player.bat")
+    else:
+        print("  ./youtube-audio-player")
     print("\nアンインストール:")
     print("  このディレクトリ全体を削除してください")
 

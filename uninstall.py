@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-YouTube Terminal Player - アンインストールスクリプト
+YouTube Audio Player - アンインストールスクリプト
 """
 
 import os
@@ -10,16 +10,15 @@ from pathlib import Path
 
 def confirm_uninstall():
     """アンインストールの確認"""
-    print("YouTube Terminal Player をアンインストールしますか？")
-    print("この操作により、以下が削除されます:")
-    print("- 仮想環境 (venv/)")
-    print("- 全ての依存関係")
-    print("- 起動スクリプト")
-    print("- 設定ファイル")
+    print("YouTube Audio Player をアンインストールしますか？")
+    print("この操作により以下が削除されます:")
+    print("  - 仮想環境 (venv/)")
+    print("  - 起動スクリプト (youtube-audio-player)")
+    print("  - キャッシュファイル")
     print()
     
     while True:
-        response = input("続行しますか？ [y/N]: ").strip().lower()
+        response = input("続行しますか？ [y/N]: ").lower().strip()
         if response in ['y', 'yes']:
             return True
         elif response in ['n', 'no', '']:
@@ -32,72 +31,124 @@ def remove_virtual_environment():
     venv_path = Path.cwd() / "venv"
     if venv_path.exists():
         print("仮想環境を削除中...")
-        shutil.rmtree(venv_path)
-        print("仮想環境が削除されました。")
+        try:
+            shutil.rmtree(venv_path)
+            print("✓ 仮想環境を削除しました")
+            return True
+        except Exception as e:
+            print(f"✗ 仮想環境の削除に失敗しました: {e}")
+            return False
     else:
-        print("仮想環境が見つかりませんでした。")
+        print("仮想環境が見つかりません")
+        return True
 
 def remove_launcher_script():
     """起動スクリプトを削除"""
-    launcher_path = Path.cwd() / "youtube-player"
+    if sys.platform == "win32":
+        launcher_path = Path.cwd() / "youtube-audio-player.bat"
+    else:
+        launcher_path = Path.cwd() / "youtube-audio-player"
+    
     if launcher_path.exists():
-        launcher_path.unlink()
-        print("起動スクリプトが削除されました。")
+        print("起動スクリプトを削除中...")
+        try:
+            launcher_path.unlink()
+            print("✓ 起動スクリプトを削除しました")
+            return True
+        except Exception as e:
+            print(f"✗ 起動スクリプトの削除に失敗しました: {e}")
+            return False
+    else:
+        print("起動スクリプトが見つかりません")
+        return True
 
 def remove_cache_files():
     """キャッシュファイルを削除"""
-    cache_patterns = [
-        "**/__pycache__",
-        "**/*.pyc",
-        "**/*.pyo",
-        "**/.DS_Store"
-    ]
+    cache_patterns = ["__pycache__", "*.pyc", "*.pyo"]
+    removed_count = 0
     
-    for pattern in cache_patterns:
-        for path in Path.cwd().glob(pattern):
-            if path.is_file():
-                path.unlink()
-            elif path.is_dir():
-                shutil.rmtree(path)
+    print("キャッシュファイルを削除中...")
+    
+    # __pycache__ディレクトリを削除
+    for pycache_dir in Path.cwd().rglob("__pycache__"):
+        try:
+            shutil.rmtree(pycache_dir)
+            removed_count += 1
+            print(f"✓ {pycache_dir} を削除しました")
+        except Exception as e:
+            print(f"✗ {pycache_dir} の削除に失敗しました: {e}")
+    
+    # .pyc, .pyoファイルを削除
+    for pattern in ["*.pyc", "*.pyo"]:
+        for file_path in Path.cwd().rglob(pattern):
+            try:
+                file_path.unlink()
+                removed_count += 1
+                print(f"✓ {file_path} を削除しました")
+            except Exception as e:
+                print(f"✗ {file_path} の削除に失敗しました: {e}")
+    
+    if removed_count == 0:
+        print("削除するキャッシュファイルが見つかりませんでした")
+    
+    return True
 
 def show_remaining_files():
     """残存ファイルを表示"""
+    print("\n残存ファイル:")
     remaining_files = []
+    
     for item in Path.cwd().iterdir():
         if item.name not in ['.git', '.gitignore']:
-            remaining_files.append(item.name)
+            remaining_files.append(item)
     
     if remaining_files:
-        print("\n以下のファイルが残っています:")
-        for file in remaining_files:
-            print(f"  - {file}")
-        print("\n完全にアンインストールするには、このディレクトリ全体を削除してください:")
+        for file_path in sorted(remaining_files):
+            if file_path.is_dir():
+                print(f"  📁 {file_path.name}/")
+            else:
+                print(f"  📄 {file_path.name}")
+        
+        print(f"\n完全な削除には、このディレクトリ全体を削除してください:")
         print(f"  rm -rf {Path.cwd()}")
+    else:
+        print("  なし")
 
 def main():
     """メインアンインストール関数"""
-    print("YouTube Terminal Player アンインストーラー")
+    print("YouTube Audio Player アンインストーラー")
     print("=" * 50)
     
     if not confirm_uninstall():
         print("アンインストールをキャンセルしました。")
-        return
+        return 0
     
     print("\nアンインストールを開始します...")
     
-    # 仮想環境削除
-    remove_virtual_environment()
+    success = True
     
-    # 起動スクリプト削除
-    remove_launcher_script()
+    # 仮想環境を削除
+    if not remove_virtual_environment():
+        success = False
     
-    # キャッシュファイル削除
-    remove_cache_files()
+    # 起動スクリプトを削除
+    if not remove_launcher_script():
+        success = False
     
-    print("\nアンインストールが完了しました。")
+    # キャッシュファイルを削除
+    if not remove_cache_files():
+        success = False
     
-    # 残存ファイル表示
+    # 残存ファイルを表示
     show_remaining_files()
+    
+    if success:
+        print("\n✓ アンインストールが完了しました！")
+        return 0
+    else:
+        print("\n⚠ アンインストール中にエラーが発生しました。")
+        print("手動で残りのファイルを削除してください。")
+        return 1
 
 if __name__ == "__main__":
-    main() 
+    sys.exit(main()) 
