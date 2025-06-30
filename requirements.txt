@@ -1,0 +1,4 @@
+textual>=0.60.0
+yt-dlp>=2024.1.7
+python-vlc>=3.0.20123
+requests>=2.31.0 
