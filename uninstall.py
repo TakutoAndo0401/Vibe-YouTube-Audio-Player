@@ -44,23 +44,37 @@ def remove_virtual_environment():
 
 def remove_launcher_script():
     """起動スクリプトを削除"""
-    if sys.platform == "win32":
-        launcher_path = Path.cwd() / "youtube-audio-player.bat"
-    else:
-        launcher_path = Path.cwd() / "youtube-audio-player"
+    scripts_to_remove = []
     
-    if launcher_path.exists():
-        print("起動スクリプトを削除中...")
-        try:
-            launcher_path.unlink()
-            print("✓ 起動スクリプトを削除しました")
-            return True
-        except Exception as e:
-            print(f"✗ 起動スクリプトの削除に失敗しました: {e}")
-            return False
+    if sys.platform == "win32":
+        scripts_to_remove = [
+            Path.cwd() / "youtube-audio-player.bat",
+            Path.cwd() / "run-tests.bat"
+        ]
     else:
+        scripts_to_remove = [
+            Path.cwd() / "youtube-audio-player",
+            Path.cwd() / "run-tests"
+        ]
+    
+    success = True
+    found_any = False
+    
+    for script_path in scripts_to_remove:
+        if script_path.exists():
+            found_any = True
+            print(f"起動スクリプトを削除中: {script_path.name}")
+            try:
+                script_path.unlink()
+                print(f"✓ {script_path.name} を削除しました")
+            except Exception as e:
+                print(f"✗ {script_path.name} の削除に失敗しました: {e}")
+                success = False
+    
+    if not found_any:
         print("起動スクリプトが見つかりません")
-        return True
+    
+    return success
 
 def remove_cache_files():
     """キャッシュファイルを削除"""

@@ -1,0 +1,7 @@
+#!/bin/bash
+# YouTube Audio Player テスト実行スクリプト
+cd "$(dirname "$0")"
+echo "Running tests..."
+"/Users/andotakuto/vibe-coding/YouTube-Audio-Player/venv/bin/python" -m pytest tests/ -v
+echo "Press Enter to continue..."
+read
