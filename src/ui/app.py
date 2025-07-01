@@ -126,15 +126,15 @@ class YouTubePlayerApp(App):
     async def _handle_url_input(self, url: str):
         """URL入力処理のコールバック"""
         if not url:
-            return
+            raise ValueError("URLが入力されていません")
         
         # 既に処理中のURLかチェック
         if url in self._processing_urls:
-            return
+            raise ValueError("このURLは既に処理中です")
         
         # URL検証
         if not self.downloader.validate_url(url):
-            return
+            raise ValueError("無効なYouTube URLです。正しいURLを入力してください")
         
         # 処理中URLリストに追加
         self._processing_urls.add(url)
@@ -145,15 +145,15 @@ class YouTubePlayerApp(App):
             if video_info and self.player.add_to_playlist(video_info):
                 self.playlist_widget.update_playlist()
                 self._update_instruction_banner()
+                # 成功メッセージは呼び出し元で表示される
             else:
-                # バナーを元に戻す
-                self._update_instruction_banner()
+                raise ValueError("動画情報の取得に失敗しました。URLを確認してください")
+        except ValueError:
+            # ValueErrorはそのまま再スロー
+            raise
         except Exception as e:
-            # バナーを元に戻す
-            try:
-                self._update_instruction_banner()
-            except:
-                pass
+            # その他のエラーは詳細メッセージ付きで再スロー
+            raise ValueError(f"処理中にエラーが発生しました: {str(e)}")
         finally:
             # 処理完了後に処理中URLリストから削除
             self._processing_urls.discard(url)

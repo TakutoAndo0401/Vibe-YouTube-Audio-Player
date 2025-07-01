@@ -12,7 +12,8 @@ class MediaPlayer:
     
     def __init__(self):
         """メディアプレイヤーを初期化"""
-        self.instance = vlc.Instance('--intf=dummy', '--no-video')
+        # VLCのログ出力を完全に抑制
+        self.instance = vlc.Instance('--intf=dummy', '--no-video', '--quiet', '--no-sout-all', '--sout-keep')
         self.player = self.instance.media_player_new()
         self.current_video: Optional[VideoInfo] = None
         self.playlist: List[VideoInfo] = []

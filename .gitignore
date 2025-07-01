@@ -1,3 +1,4 @@
 .venv/
 venv/
 youtube-audio-player
+.pytest_cache

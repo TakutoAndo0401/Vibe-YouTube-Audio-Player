@@ -31,7 +31,7 @@ class TestMediaPlayer:
         assert player.current_index == 0
         assert player.is_playing is False
         
-        mock_vlc.Instance.assert_called_once_with('--intf=dummy', '--no-video')
+        mock_vlc.Instance.assert_called_once_with('--intf=dummy', '--no-video', '--quiet', '--no-sout-all', '--sout-keep')
         mock_instance.media_player_new.assert_called_once()
     
     @patch('src.core.media_player.vlc')
